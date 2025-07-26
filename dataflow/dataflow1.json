@@ -1,0 +1,129 @@
+{
+	"name": "dataflow1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "DS_SalesPerformance",
+						"type": "DatasetReference"
+					},
+					"name": "SalesPerformanceSource"
+				},
+				{
+					"dataset": {
+						"referenceName": "DS_MarketingPerformance",
+						"type": "DatasetReference"
+					},
+					"name": "MarketingPerformanceSource"
+				},
+				{
+					"dataset": {
+						"referenceName": "DS_EmployeeMaster",
+						"type": "DatasetReference"
+					},
+					"name": "EmployeeMasterSource"
+				},
+				{
+					"dataset": {
+						"referenceName": "DS_DepartmentTargets",
+						"type": "DatasetReference"
+					},
+					"name": "DepartmentTargetsSource"
+				}
+			],
+			"sinks": [],
+			"transformations": [
+				{
+					"name": "CombinePerformanceData"
+				},
+				{
+					"name": "EnrichWithEmployeeDetails"
+				},
+				{
+					"name": "FilterActiveEmployees"
+				},
+				{
+					"name": "CreateFullName"
+				},
+				{
+					"name": "PivotMetricsToColumns"
+				},
+				{
+					"name": "EnrichWithTargets"
+				},
+				{
+					"name": "derivedColumn1"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          EmployeeID as string,",
+				"          Month as string,",
+				"          Metric as string,",
+				"          Value as integer,",
+				"          Department as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> SalesPerformanceSource",
+				"source(output(",
+				"          EmployeeID as string,",
+				"          Month as string,",
+				"          Metric as string,",
+				"          Value as integer,",
+				"          Department as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> MarketingPerformanceSource",
+				"source(output(",
+				"          EmployeeID as string,",
+				"          FirstName as string,",
+				"          LastName as string,",
+				"          HireDate as string,",
+				"          Status as string,",
+				"          ManagerID as string,",
+				"          Location as string,",
+				"          Department as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> EmployeeMasterSource",
+				"source(output(",
+				"          Department as string,",
+				"          Month as string,",
+				"          Target_Type as string,",
+				"          Target_Value as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> DepartmentTargetsSource",
+				"SalesPerformanceSource, MarketingPerformanceSource union(byName: true)~> CombinePerformanceData",
+				"CombinePerformanceData, EmployeeMasterSource lookup(CombinePerformanceData@EmployeeID == EmployeeMasterSource@EmployeeID,",
+				"     multiple: false,",
+				"     pickup: 'any',",
+				"     broadcast: 'auto')~> EnrichWithEmployeeDetails",
+				"EnrichWithEmployeeDetails filter(Status == \"Active\") ~> FilterActiveEmployees",
+				"FilterActiveEmployees derive(FullName = FirstName + ' ' +LastName) ~> CreateFullName",
+				"CreateFullName pivot(groupBy(CombinePerformanceData@EmployeeID,",
+				"          FullName,",
+				"          Month,",
+				"          CombinePerformanceData@Department,",
+				"          Status,",
+				"          Location,",
+				"          ManagerID),",
+				"     pivotBy(Metric),",
+				"     {} = sum(Value),",
+				"     columnNaming: '$N$V',",
+				"     lateral: true) ~> PivotMetricsToColumns",
+				"PivotMetricsToColumns, DepartmentTargetsSource lookup(PivotMetricsToColumns@Department == DepartmentTargetsSource@Department",
+				"     && PivotMetricsToColumns@Month == DepartmentTargetsSource@Month,",
+				"     multiple: true,",
+				"     broadcast: 'auto')~> EnrichWithTargets",
+				"EnrichWithTargets derive() ~> derivedColumn1"
+			]
+		}
+	}
+}
